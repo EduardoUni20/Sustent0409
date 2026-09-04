@@ -44,7 +44,7 @@ export default function SalesPrediction() {
     const historico = historialVentas.map((punto) => ({
       etiqueta: punto.mes,
       real: punto.unidades,
-      tendencia: Math.round(m * punto.x + b),
+      tendencia: Math.round(m * punto.x + b),//regresion 
     }));
 
     const futuro = [];
