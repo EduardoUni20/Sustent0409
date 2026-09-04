@@ -7,7 +7,7 @@ import { products, formatoPrecio } from "@/data/products";
 // aₙ = a₁ + (n - 1) d         término n-ésimo
 // Sₙ = (n / 2) · (a₁ + aₙ)    suma de los n términos (debe dar el precio total)
 //
-// Dado el precio total (P), el número de cuotas (n) y la diferencia (d)
+// Dado el precio total (P), el número de cuotas (n) y la diferencia (d) disminue la cuota
 // entre una cuota y la siguiente, despejamos a₁ de Sₙ = P:
 //   P = (n/2)(2a₁ + (n-1)d)  =>  a₁ = P/n - d(n-1)/2
 function generarPlanDeCuotas(precioTotal, n, d) {
@@ -22,7 +22,7 @@ function generarPlanDeCuotas(precioTotal, n, d) {
   // Ajuste de redondeo: que la suma real sea EXACTAMENTE el precio total,
   // corrigiendo la diferencia (por los decimales) en la última cuota.
   const sumaActual = cuotas.reduce((a, b) => a + b, 0);
-  const diferencia = precioTotal - sumaActual;
+  const diferencia = precioTotal - sumaActual;//por los decimales 
   cuotas[cuotas.length - 1] += diferencia;
 
   return { a1: Math.round(a1), cuotas, an: cuotas[cuotas.length - 1] };
