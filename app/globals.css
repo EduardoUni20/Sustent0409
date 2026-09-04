@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f8fafc;
+  color: #111827;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5;
+}
+
+.badge {
+  @apply inline-block text-xs font-semibold px-2 py-1 rounded-full;
+}
+
+.btn-primary {
+  @apply bg-marca text-white px-4 py-2 rounded-lg font-medium hover:bg-marca-claro transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-white text-marca border border-gray-300 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors;
+}
+
+code.inline {
+  @apply bg-gray-100 text-marca-acento px-1.5 py-0.5 rounded text-sm font-mono;
+}
