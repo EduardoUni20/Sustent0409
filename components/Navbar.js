@@ -11,6 +11,8 @@ const enlaces = [
   { href: "/recursividad", texto: "Recursividad" },
   { href: "/progresiones", texto: "Progresiones" },
   { href: "/regresion-lineal", texto: "Regresión Lineal" },
+  { href: "/entregas", texto: "Entregas" },
+  { href: "/solicitudes", texto: "Solicitudes" },
 ];
 
 export default function Navbar() {

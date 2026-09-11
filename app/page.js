@@ -46,8 +46,25 @@ export default function Inicio() {
           complejidad="y = mx + b"
           color="bg-emerald-50 text-emerald-700"
         />
-      </section>
 
+         <TemaCard
+          href="/entregas"
+          titulo="Entregas"
+          descripcion=""
+          complejidad=""
+          color="bg-emerald-50 text-emerald-700"
+        />
+
+        
+         <TemaCard
+          href="/solicitudes"
+          titulo="Solicitudes"
+          descripcion=""
+          complejidad=""
+          color="bg-emerald-50 text-emerald-700"
+        />
+
+      </section>
       <section>
         <h2 className="text-xl font-bold text-marca mb-4">Catálogo de productos</h2>
         <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
