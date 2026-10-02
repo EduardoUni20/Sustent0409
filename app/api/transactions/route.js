@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { logHashDiagnostics } from "@/lib/slidingWindowDiagnostics";
 import { validateTransactionHash } from "@/lib/transactionHash";
 
 export const runtime = "nodejs";
@@ -153,7 +154,9 @@ export async function POST(request) {
     let hashResult;
     try {
       hashResult = validateTransactionHash(transaction);
+      logHashDiagnostics(transaction, hashResult);
     } catch (error) {
+      console.error("[SlidingWindow] Error validando hash:", error);
       return json({ error: error.message }, 500);
     }
 
