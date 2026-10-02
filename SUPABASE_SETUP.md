@@ -38,8 +38,12 @@ se utiliza solo en las rutas del servidor; nunca la publiques como `NEXT_PUBLIC_
    HASH_FIELDS=idTxn,user,date,value,paymentMethod
    ```
 
-4. En local ejecuta `npm run dev`. Para Vercel, agrega las mismas variables en
-   **Project → Settings → Environment Variables** y vuelve a desplegar.
+4. En local ejecuta `npm run dev`. Para producción, agrega en **Vercel → Project
+   → Settings → Environment Variables** tanto `SUPABASE_URL` como
+   `SUPABASE_SECRET_KEY` para el entorno **Production**. `SUPABASE_URL` debe
+   corresponder al mismo host de proyecto que usas localmente. Después de cambiar
+   variables, crea un nuevo deployment para que la función de Vercel las reciba.
+   No es necesario volver a desplegar cada vez que ingresen transacciones.
 
 ### Si aparece `permission denied for function get_transaction_dashboard`
 
@@ -71,6 +75,26 @@ que ejecutaste el bloque completo en el proyecto correcto. Después reinicia
 `SUPABASE_SECRET_KEY` sea la clave **secret** del mismo proyecto (o que
 `SUPABASE_SERVICE_ROLE_KEY` sea la clave `service_role` antigua), y no una clave
 publishable.
+
+### Comprobar si existen anomalías para mostrar
+
+Ejecuta esto en el SQL Editor del mismo proyecto Supabase configurado en Vercel:
+
+```sql
+select
+  (select count(*) from public.transactions) as total_transactions,
+  (select count(*) from public.transactions where hash_valid) as valid_hash_transactions,
+  (select count(*) from public.transactions where not hash_valid) as invalid_hash_transactions,
+  (select count(*) from public.anomalies) as total_anomalies;
+```
+
+El detector crea una anomalía durante el procesamiento del POST cuando se alcanza
+el umbral con transacciones de hash válido. No reconstruye anomalías
+retroactivamente al abrir o actualizar el dashboard. Por eso puede haber
+transacciones y cero anomalías si se recibieron fuera de la misma ventana, sus
+hashes no validaron o se guardaron antes de activar la regla. Comprueba la
+respuesta del POST: para el evento que supera el umbral debe indicar
+`hashValid: true` y `anomaly: true`.
 
 ## 3. Enviar una transacción
 
@@ -241,12 +265,36 @@ El endpoint admite preflight `OPTIONS` para clientes web. Si defines
 
 6. Pulsa **Send**. La respuesta debe tener HTTP `200`, tres resultados con
    `hashValid: true` y la tercera transacción debe reportar `anomaly: true`.
-   Abre `/ventana-deslizante` para ver el caso. Para repetir la prueba, usa tres
+   Para probar la producción, cambia la URL por
+   `https://sustent0409.vercel.app/api/transactions`. Abre
+   `/ventana-deslizante` para ver el caso. Para repetir la prueba, usa tres
    `idTxn` distintos; el endpoint evita guardar identificadores duplicados.
 
-## 6. Dashboard
+## 6. Actualizar el dashboard ya creado en Supabase
+
+Para ver todas las anomalías con paginación y cambiar su estado desde el dashboard,
+ejecuta el contenido de [`supabase/dashboard_migration.sql`](./supabase/dashboard_migration.sql)
+en el SQL Editor de Supabase. Este script es re-ejecutable: concede `EXECUTE`
+solo a `service_role` para las funciones que llama el servidor, y reconstruye
+anomalías faltantes para transacciones históricas con hash válido que cumplan la
+regla predeterminada de 3 transacciones en 3 segundos.
+
+No concedas `EXECUTE` a `anon` ni a `authenticated` para estas funciones. La app
+las invoca desde rutas de servidor usando la clave privada de Supabase; abrirlas
+a roles públicos permitiría invocar procesamiento o estadísticas directamente.
+Tampoco uses `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public`, porque incluye
+funciones que no necesita el cliente.
+
+La tabla guarda todos los registros hasta la cuota de almacenamiento de tu plan;
+el dashboard no intenta descargarlos todos en una única respuesta. Usa páginas
+de 25, 50 o 100 registros por carga; usa “Cargar siguientes” o “Cargar todas”
+para recorrer el historial completo. El endpoint acepta
+hasta 1000 transacciones por petición para respetar límites de tamaño/tiempo de
+Next.js y Vercel: envía datasets mayores en lotes sucesivos con IDs únicos.
+
+## 7. Dashboard
 
 Abre `/ventana-deslizante` en la aplicación. El dashboard muestra totales por
 hoy/semana/mes, transacciones, anomalías y su estado, distribución horaria,
-tendencia semanal, métodos de pago, usuarios recurrentes y las 50 anomalías más
-recientes. Desde la tabla puedes marcar una anomalía como revisada o descartada.
+tendencia semanal, métodos de pago, usuarios recurrentes, y tablas paginadas de
+anomalías recientes y transacciones. Usa “Cargar todas” para recorrer cada tabla.

@@ -342,11 +342,40 @@ begin
 end;
 $$;
 
+create or replace function public.update_anomaly_status(
+  p_anomaly_id uuid,
+  p_status text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+begin
+  if p_status not in ('open', 'reviewed', 'discarded') then
+    raise exception 'El estado de la anomalía no es válido.';
+  end if;
+
+  update public.anomalies
+  set status = p_status,
+      updated_at = now()
+  where id = p_anomaly_id
+  returning jsonb_build_object('id', id, 'status', status)
+  into v_result;
+
+  return v_result;
+end;
+$$;
+
 revoke all on function public.process_transaction(
   text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
 ) from public, anon, authenticated;
 revoke all on function public.get_transaction_dashboard() from public, anon, authenticated;
+revoke all on function public.update_anomaly_status(uuid, text) from public, anon, authenticated;
 grant execute on function public.process_transaction(
   text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
 ) to service_role;
 grant execute on function public.get_transaction_dashboard() to service_role;
+grant execute on function public.update_anomaly_status(uuid, text) to service_role;
