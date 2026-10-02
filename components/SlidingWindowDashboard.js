@@ -69,6 +69,8 @@ export default function SlidingWindowDashboard() {
   const [transactionPageSize, setTransactionPageSize] = useState(50);
   const [transactionTotal, setTransactionTotal] = useState(0);
   const [transactionTotalPages, setTransactionTotalPages] = useState(0);
+  const [recentAnomalyPage, setRecentAnomalyPage] = useState(1);
+  const recentAnomalyPageSize = 10;
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -174,13 +176,27 @@ export default function SlidingWindowDashboard() {
     }
   }
 
-  if (loading && !dashboard) {
-    return <p className="py-16 text-center text-gray-500">Cargando dashboard…</p>;
-  }
-
   const periods = dashboard?.periods;
   const totals = dashboard?.totals;
   const statuses = dashboard?.statuses;
+  const recentAnomalies = dashboard?.recentAnomalies ?? [];
+  const recentAnomalyTotalPages = Math.max(
+    1,
+    Math.ceil(recentAnomalies.length / recentAnomalyPageSize),
+  );
+  const safeRecentAnomalyPage = Math.min(recentAnomalyPage, recentAnomalyTotalPages);
+  const paginatedRecentAnomalies = recentAnomalies.slice(
+    (safeRecentAnomalyPage - 1) * recentAnomalyPageSize,
+    safeRecentAnomalyPage * recentAnomalyPageSize,
+  );
+
+  useEffect(() => {
+    setRecentAnomalyPage(1);
+  }, [recentAnomalies.length]);
+
+  if (loading && !dashboard) {
+    return <p className="py-16 text-center text-gray-500">Cargando dashboard…</p>;
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -392,7 +408,9 @@ export default function SlidingWindowDashboard() {
                   la ventana que activó el caso.
                 </p>
               </div>
-              <span className="text-xs text-gray-500">Máximo 50 registros</span>
+              <span className="text-xs text-gray-500">
+                {recentAnomalies.length} registros
+              </span>
             </div>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-sm">
@@ -409,7 +427,7 @@ export default function SlidingWindowDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {dashboard.recentAnomalies.map((anomaly) => (
+                  {paginatedRecentAnomalies.map((anomaly) => (
                     <tr key={anomaly.id}>
                       <td className="whitespace-nowrap py-3 pr-4">
                         {new Date(anomaly.transactionDate).toLocaleString("es-CO")}
@@ -450,7 +468,7 @@ export default function SlidingWindowDashboard() {
                       </td>
                     </tr>
                   ))}
-                  {dashboard.recentAnomalies.length === 0 && (
+                  {recentAnomalies.length === 0 && (
                     <tr>
                       <td className="py-10 text-center text-gray-500" colSpan={8}>
                         No se han detectado anomalías.
@@ -460,134 +478,32 @@ export default function SlidingWindowDashboard() {
                 </tbody>
               </table>
             </div>
+
+            {recentAnomalies.length > 0 && (
+              <div className="mt-4 flex flex-col items-center justify-between gap-3 border-t border-gray-200 pt-4 sm:flex-row">
+                <p className="text-sm text-gray-500">
+                  Página {safeRecentAnomalyPage} de {recentAnomalyTotalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={safeRecentAnomalyPage === 1}
+                    onClick={() => setRecentAnomalyPage((page) => Math.max(1, page - 1))}
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={safeRecentAnomalyPage === recentAnomalyTotalPages}
+                    onClick={() => setRecentAnomalyPage((page) => Math.min(recentAnomalyTotalPages, page + 1))}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
-          <section className="card">
-            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
-              <div>
-                <h2 className="font-bold text-gray-900">
-                  Registro de transacciones
-                </h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Historial recibido por el endpoint, con estado de validación
-                  del hash. La paginación permite consultar todo el historial.
-                </p>
-              </div>
-              <span className="text-sm text-gray-500">
-                {number.format(transactionTotal)} transacciones
-              </span>
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="border-b text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="py-3 pr-4">Fecha / hora</th>
-                    <th className="py-3 pr-4">Usuario</th>
-                    <th className="py-3 pr-4">ID transacción</th>
-                    <th className="py-3 pr-4">Valor</th>
-                    <th className="py-3 pr-4">Método de pago</th>
-                    <th className="py-3 pr-4">Estado</th>
-                    <th className="py-3">Hash</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id}>
-                      <td className="whitespace-nowrap py-3 pr-4">
-                        {new Date(transaction.date).toLocaleString("es-CO")}
-                      </td>
-                      <td className="py-3 pr-4">{transaction.email || "—"}</td>
-                      <td className="py-3 pr-4">{transaction.idTxn}</td>
-                      <td className="whitespace-nowrap py-3 pr-4">
-                        {money.format(transaction.value)}
-                      </td>
-                      <td className="py-3 pr-4">{transaction.paymentMethod}</td>
-                      <td className="py-3 pr-4">{transaction.state}</td>
-                      <td className="py-3">
-                        <span
-                          className={`badge ${
-                            transaction.hashValid
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {transaction.hashValid ? "Válido" : "Inválido"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!transactionsLoading && transactions.length === 0 && (
-                    <tr>
-                      <td
-                        className="py-10 text-center text-gray-500"
-                        colSpan={7}
-                      >
-                        No hay transacciones en esta base de datos.
-                      </td>
-                    </tr>
-                  )}
-                  {transactionsLoading && (
-                    <tr>
-                      <td className="py-10 text-center text-gray-500" colSpan={7}>
-                        Cargando transacciones…
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex flex-col justify-between gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center">
-              <p className="text-sm text-gray-500">
-                Mostrando {number.format(transactions.length)} de{" "}
-                {number.format(transactionTotal)} transacciones
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="mr-2 flex items-center gap-2 text-sm text-gray-600">
-                  Por página
-                  <select
-                    className="rounded-md border border-gray-300 bg-white px-2 py-1.5"
-                    value={transactionPageSize}
-                    onChange={(event) => {
-                      setTransactionPageSize(Number(event.target.value));
-                      setTransactionPage(1);
-                      setTransactions([]);
-                    }}
-                  >
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </label>
-                <button
-                  className="btn-secondary px-3 py-1.5 text-sm"
-                  disabled={
-                    transactionPage >= transactionTotalPages ||
-                    transactionsLoading
-                  }
-                  onClick={() =>
-                    loadTransactions(transactionPage + 1, true)
-                  }
-                >
-                  {transactionsLoading
-                    ? "Cargando…"
-                    : `Cargar siguientes ${transactionPageSize}`}
-                </button>
-                <button
-                  className="btn-primary px-3 py-1.5 text-sm"
-                  disabled={
-                    transactionPage >= transactionTotalPages ||
-                    transactionsLoading ||
-                    loadingAllTransactions
-                  }
-                  onClick={loadAllTransactions}
-                >
-                  {loadingAllTransactions
-                    ? "Cargando todo…"
-                    : "Cargar todas"}
-                </button>
-              </div>
-            </div>
-          </section>
         </>
       ) : null}
     </div>

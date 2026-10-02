@@ -301,7 +301,6 @@ begin
     select *
     from public.anomalies
     order by created_at desc
-    limit 50
   ) a
   join public.transactions t on t.id = a.transaction_id
   join public.users u on u.id = t.user_id;
