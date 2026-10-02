@@ -22,6 +22,7 @@ import MetricCard from "@/components/sliding-window/MetricCard";
 import RecentAnomaliesTable from "@/components/sliding-window/RecentAnomaliesTable";
 import { logAnomalyLifecycle } from "@/lib/slidingWindowDiagnostics";
 
+//tipo de moneda para verlo visualmente
 const money = new Intl.NumberFormat("es-CO", {
   style: "currency",
   currency: "COP",
@@ -30,6 +31,7 @@ const money = new Intl.NumberFormat("es-CO", {
 const number = new Intl.NumberFormat("es-CO");
 const COLORS = ["#e11d48", "#f59e0b", "#2563eb", "#10b981", "#7c3aed"];
 
+//convertir fecha a hora y minuto para las graficas
 function formatHour(value) {
   return new Date(value).toLocaleTimeString("es-CO", {
     hour: "2-digit",
@@ -37,6 +39,7 @@ function formatHour(value) {
   });
 }
 
+// día de la semana número del día ,Esto se usa después en la gráfica semanal.
 function formatDay(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("es-CO", {
     weekday: "short",
@@ -59,6 +62,7 @@ export default function SlidingWindowDashboard() {
   const [recurrentUsersPage, setRecurrentUsersPage] = useState(1);
   const recurrentUsersPageSize = 5;
 
+  //api dashooar trae metricas generales  como totales transaciones, anomalias 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
