@@ -80,10 +80,10 @@ export function OPTIONS() {
 
 export async function POST(request) {
   const expectedApiKey = process.env.INGEST_API_KEY;
-  if (
-    expectedApiKey &&
-    request.headers.get("x-api-key") !== expectedApiKey
-  ) {
+  if (!expectedApiKey) {
+    return json({ error: "El servidor no tiene configurada INGEST_API_KEY." }, 503);
+  }
+  if (request.headers.get("x-api-key") !== expectedApiKey) {
     return json({ error: "API key no válida." }, 401);
   }
 

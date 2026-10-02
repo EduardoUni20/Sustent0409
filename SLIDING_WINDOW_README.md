@@ -20,6 +20,7 @@
 ## Hashes y Logs
 
 * **`lib/transactionHash.js`:** Genera un SHA-256 o HMAC-SHA-256 de campos configurables y compara el resultado con el hash recibido usando tiempo constante. Sirve para comprobar la integridad de la transacción, no como hash de contraseñas.
+* **`INGEST_API_KEY`:** Secreto fijo compartido que el emisor envía en `x-api-key` para autorizar `POST /api/transactions`. No es el hash de la transacción: ese hash se calcula por separado para cada payload.
 * **`lib/slidingWindowDiagnostics.js`:** Registra diagnósticos del hash y eventos del sistema. Las APIs también usan `console.error` cuando falla una operación.
 * **Nota de seguridad:** Los diagnósticos del hash incluyen datos de la transacción (como el correo), pero no imprimen el hash recibido.
 

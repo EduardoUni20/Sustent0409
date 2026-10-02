@@ -36,11 +36,14 @@ se utiliza solo en las rutas del servidor; nunca la publiques como `NEXT_PUBLIC_
    HASH_ALGORITHM=sha256
    HASH_ENCODING=hex
    HASH_FIELDS=idTxn,user,date,value,paymentMethod
+   INGEST_API_KEY=TU_SECRETO_COMPARTIDO_ALEATORIO
    ```
 
 4. En local ejecuta `npm run dev`. Para producción, agrega en **Vercel → Project
-   → Settings → Environment Variables** tanto `SUPABASE_URL` como
-   `SUPABASE_SECRET_KEY` para el entorno **Production**. `SUPABASE_URL` debe
+   → Settings → Environment Variables** `SUPABASE_URL`,
+   `SUPABASE_SECRET_KEY` e `INGEST_API_KEY` para el entorno **Production**.
+   Comparte el valor de `INGEST_API_KEY` solo con los emisores autorizados; cada
+   uno debe enviarlo en el encabezado `x-api-key`. `SUPABASE_URL` debe
    corresponder al mismo host de proyecto que usas localmente. Después de cambiar
    variables, crea un nuevo deployment para que la función de Vercel las reciba.
    No es necesario volver a desplegar cada vez que ingresen transacciones.
@@ -189,16 +192,18 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/transactions" `
   -ContentType "application/json" -Body $body
 ```
 
-El endpoint admite preflight `OPTIONS` para clientes web. Si defines
-`INGEST_API_KEY`, el emisor debe enviar también el encabezado `x-api-key`.
+El endpoint admite preflight `OPTIONS` para clientes web. `INGEST_API_KEY` es
+obligatoria para registrar transacciones: configura el secreto en `.env.local`
+y envíalo desde el emisor en el encabezado `x-api-key`. Es un token compartido
+de autorización, no el hash calculado para cada transacción.
 `ALLOWED_ORIGIN` controla el origen CORS (por defecto `*`).
 
 ### Probar desde Postman
 
 1. Inicia la aplicación con `npm run dev`.
 2. Crea una petición **POST** a `http://localhost:3000/api/transactions`.
-3. En **Headers**, agrega `Content-Type: application/json`. Si configuraste
-   `INGEST_API_KEY` en `.env.local`, agrega también `x-api-key` con ese valor.
+3. En **Headers**, agrega `Content-Type: application/json` y `x-api-key` con
+   el mismo secreto configurado como `INGEST_API_KEY` en `.env.local`.
    No se necesita un token Bearer ni la clave de Supabase en Postman.
 4. En **Body → raw → JSON**, pega este lote de prueba. Usa un correo de prueba
    y asegúrate de que los tres `idTxn` sean nuevos:
