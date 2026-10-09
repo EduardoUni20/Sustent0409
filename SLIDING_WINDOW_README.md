@@ -28,8 +28,8 @@ registrado se considera duplicado.
 
 ## Hashes y Logs
 
-* **`lib/transactionHash.js`:** Genera un SHA-256 o HMAC-SHA-256 de campos configurables y compara el resultado con el hash recibido usando tiempo constante. Sirve para comprobar la integridad de la transacción, no como hash de contraseñas.
-* **`INGEST_API_KEY`:** Secreto fijo compartido que el emisor envía en `x-api-key` para autorizar `POST /api/transactions`. No es el hash de la transacción: ese hash se calcula por separado para cada payload.
+* **`lib/transactionHash.js`:** Verifica HMAC-SHA-256 de los campos configurables usando comparación de tiempo constante. La clave compartida `HASH_SECRET` debe configurarse en el servidor y en el emisor, que calcula y envía el HMAC de cada transacción.
+* El endpoint no requiere `x-api-key`. Un HMAC faltante se rechaza con HTTP 400 y uno que no coincide con HTTP 401; se validan todos los hashes del lote antes de guardar cualquier transacción.
 * **`lib/slidingWindowDiagnostics.js`:** Registra diagnósticos del hash y eventos del sistema. Las APIs también usan `console.error` cuando falla una operación.
 * **Nota de seguridad:** Los diagnósticos del hash incluyen datos de la transacción (como el correo), pero no imprimen el hash recibido.
 

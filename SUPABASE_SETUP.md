@@ -37,19 +37,20 @@ se utiliza solo en las rutas del servidor; nunca la publiques como `NEXT_PUBLIC_
    MORNING_WINDOW_SIZE=10
    AFTERNOON_WINDOW_SIZE=6
    NIGHT_WINDOW_SIZE=3
-   HASH_ALGORITHM=sha256
+   HASH_ALGORITHM=hmac-sha256
    HASH_ENCODING=hex
    HASH_FIELDS=idTxn,user,date,value,paymentMethod
-   INGEST_API_KEY=TU_SECRETO_COMPARTIDO_ALEATORIO
+   HASH_SECRET=TU_SECRETO_COMPARTIDO_ALEATORIO
    ```
 
 4. En local ejecuta `npm run dev`. Para producción, agrega en **Vercel → Project
    → Settings → Environment Variables** `SUPABASE_URL`,
-   `SUPABASE_SECRET_KEY` e `INGEST_API_KEY` para el entorno **Production**.
-   Comparte el valor de `INGEST_API_KEY` solo con los emisores autorizados; cada
-   uno debe enviarlo en el encabezado `x-api-key`. `SUPABASE_URL` debe
-   corresponder al mismo host de proyecto que usas localmente. Después de cambiar
-   variables, crea un nuevo deployment para que la función de Vercel las reciba.
+   `SUPABASE_SECRET_KEY`, `HASH_ALGORITHM`, `HASH_ENCODING`, `HASH_FIELDS` y
+   `HASH_SECRET` para el entorno **Production**. Configura la misma `HASH_SECRET`
+   en el bot autorizado usando un canal privado. No la publiques ni la incluyas
+   en el JSON de la transacción. `SUPABASE_URL` debe corresponder al mismo host
+   de proyecto que usas localmente. Después de cambiar variables, crea un nuevo
+   deployment para que la función de Vercel las reciba.
    No es necesario volver a desplegar cada vez que ingresen transacciones.
 
 ### Si aparece `permission denied for function get_transaction_dashboard`
@@ -142,57 +143,65 @@ usuario cronológicamente; las ventanas de usuarios distintos no se mezclan.
 Cualquier `idTxn` no vacío de texto o número es válido. Si se vuelve a enviar un
 identificador ya registrado, se reporta como duplicado y no se inserta otra vez.
 
-## 4. Convención inicial del hash
+## 4. HMAC de autenticación de cada transacción
 
-La información recibida no indica el formato con el que el script del profesor
-crea el hash. Como punto de partida, el endpoint calcula SHA-256 hexadecimal del
-JSON compacto de estos campos, respetando el orden:
+El endpoint requiere un HMAC-SHA-256 válido y no requiere un encabezado
+`x-api-key`. Configura `HASH_SECRET` con el mismo secreto aleatorio en el
+servidor y en el bot, mediante un canal privado. No uses el ejemplo de clave de
+la diapositiva (`mi_llave_privada_123`) en producción.
 
-```js
-JSON.stringify({
-  idTxn: 10001,
-  user: "aa@aa.com",
-  date: "2026-09-23T10:30:01.120Z",
-  value: 50000,
-  paymentMethod: "Tarjeta"
-})
+Por defecto, el servidor firma estos campos en orden alfabético de nombres,
+serializados como JSON compacto UTF-8, y envía el resultado en hexadecimal:
+
+```json
+{"date":"2026-09-23T10:30:01.120Z","idTxn":10001,"paymentMethod":"Tarjeta","user":"aa@aa.com","value":50000}
 ```
 
-Para calcular el valor en un script Node.js con esa convención:
+El bot en Python puede generar el mismo valor con los mismos nombres de campos,
+valores, serialización y secreto:
 
-```js
-const crypto = require("node:crypto");
-const hash = crypto
-  .createHash("sha256")
-  .update(
-    JSON.stringify({
-      idTxn: 10001,
-      user: "aa@aa.com",
-      date: "2026-09-23T10:30:01.120Z",
-      value: 50000,
-      paymentMethod: "Tarjeta",
-    }),
-  )
-  .digest("hex");
+```python
+import hashlib
+import hmac
+import json
+import os
+
+secret = os.environ["HASH_SECRET"].encode("utf-8")
+canonical = {
+    "idTxn": 10001,
+    "user": "aa@aa.com",
+    "date": "2026-09-23T10:30:01.120Z",
+    "value": 50000,
+    "paymentMethod": "Tarjeta",
+}
+if isinstance(canonical["value"], float) and canonical["value"].is_integer():
+    canonical["value"] = int(canonical["value"])
+data = json.dumps(
+    canonical,
+    sort_keys=True,
+    separators=(",", ":"),
+    ensure_ascii=False,
+)
+transaction_hash = hmac.new(
+    secret,
+    data.encode("utf-8"),
+    hashlib.sha256,
+).hexdigest()
 ```
 
-En este modo no existe una “clave” secreta. Si el profesor comparte otra fórmula,
-ajusta `HASH_ALGORITHM` y `HASH_FIELDS` en `.env.local`/Vercel. Los campos
-permitidos son `idTxn,user,date,value,paymentMethod,ip,state`, separados por
-comas. Si el script usa HMAC-SHA256, selecciona `HASH_ALGORITHM=hmac-sha256` y
-define `HASH_SECRET` con el secreto compartido; ambos lados deben usar el mismo.
-El resultado se puede configurar como `HASH_ENCODING=hex` o `HASH_ENCODING=base64`.
-Si los hashes del script no coinciden, pide el algoritmo, los campos y su orden,
-la codificación del resultado (hexadecimal/base64) y la representación exacta
-de los datos; no basta con cambiar una clave si el script usa SHA-256 sin HMAC.
-Si el hash no coincide, la transacción queda guardada con `hash_valid=false`,
-pero no participa en las ventanas ni genera anomalías. La respuesta lo señala
-con `hashValid: false`.
+Los campos incluidos se configuran en `HASH_FIELDS`; los permitidos son
+`idTxn,user,date,value,paymentMethod,ip,state`. La serialización ordena los
+nombres alfabéticamente, independientemente del orden configurado. Ambos lados
+deben firmar los mismos nombres, valores, tipos y fecha. Los alias del endpoint
+se normalizan antes de verificar el HMAC, así que el bot debe firmar los nombres
+canónicos mostrados arriba. Un HMAC faltante produce HTTP 400 y uno incorrecto
+HTTP 401. Si el lote tiene un HMAC inválido, no se guarda ninguna transacción.
 
 ## 5. Probar el endpoint
 
 Desde PowerShell, con Next.js en ejecución, puedes probar que el endpoint recibe
-POST. Sustituye `hash` por el hash correcto de acuerdo con la sección anterior:
+POST. Sustituye `hash` por el HMAC correcto calculado de acuerdo con la sección
+anterior:
 
 ```powershell
 $body = @{
@@ -201,25 +210,24 @@ $body = @{
   date = "2026-09-23T10:30:01.120Z"
   value = 50000
   paymentMethod = "Tarjeta"
-  hash = "HASH_SHA256_EN_HEXADECIMAL"
+  hash = "HMAC_HEXADECIMAL_CALCULADO_POR_EL_BOT"
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/transactions" `
   -ContentType "application/json" -Body $body
 ```
 
-El endpoint admite preflight `OPTIONS` para clientes web. `INGEST_API_KEY` es
-obligatoria para registrar transacciones: configura el secreto en `.env.local`
-y envíalo desde el emisor en el encabezado `x-api-key`. Es un token compartido
-de autorización, no el hash calculado para cada transacción.
+El endpoint admite preflight `OPTIONS` para clientes web y no requiere un
+encabezado `x-api-key`: el HMAC de cada transacción autoriza y protege su
+integridad.
 `ALLOWED_ORIGIN` controla el origen CORS (por defecto `*`).
 
 ### Probar desde Postman
 
 1. Inicia la aplicación con `npm run dev`.
 2. Crea una petición **POST** a `http://localhost:3000/api/transactions`.
-3. En **Headers**, agrega `Content-Type: application/json` y `x-api-key` con
-   el mismo secreto configurado como `INGEST_API_KEY` en `.env.local`.
+3. En **Headers**, agrega `Content-Type: application/json`. No agregues
+   `x-api-key` ni compartas la clave privada de Supabase.
    No se necesita un token Bearer ni la clave de Supabase en Postman.
 4. En **Body → raw → JSON**, pega este lote de prueba. Usa un correo de prueba
    y asegúrate de que los tres `idTxn` sean nuevos:
@@ -250,39 +258,10 @@ de autorización, no el hash calculado para cada transacción.
    ]
    ```
 
-5. Abre **Scripts → Pre-request** (en algunas versiones, **Pre-request Script**)
-   y pega lo siguiente. Calcula el hash para cada transacción usando la
-   convención inicial documentada arriba y agrega el campo automáticamente:
-
-   ```js
-   const CryptoJS = require("crypto-js");
-   const payload = JSON.parse(pm.request.body.raw);
-
-   function addHash(transaction) {
-     const canonical = {
-       idTxn: transaction.idTxn,
-       user: transaction.user,
-       date: transaction.date,
-       value: transaction.value,
-       paymentMethod: transaction.paymentMethod,
-     };
-     return {
-       ...transaction,
-       hash: CryptoJS.SHA256(JSON.stringify(canonical)).toString(),
-     };
-   }
-
-   const updatedPayload = Array.isArray(payload)
-     ? payload.map(addHash)
-     : Array.isArray(payload.transactions)
-       ? { ...payload, transactions: payload.transactions.map(addHash) }
-       : addHash(payload);
-
-   pm.request.body.update({
-     mode: "raw",
-     raw: JSON.stringify(updatedPayload, null, 2),
-   });
-   ```
+5. Agrega un campo `hash` a cada transacción con el HMAC hexadecimal que genera
+   el bot usando la convención documentada en el apartado 4. El emisor real
+   (por ejemplo, el bot del profesor) también debe generar ese HMAC por
+   transacción antes de enviar.
 
 6. Pulsa **Send**. La respuesta debe tener HTTP `200`, tres resultados con
    `hashValid: true` y la tercera transacción debe reportar `anomaly: true`.

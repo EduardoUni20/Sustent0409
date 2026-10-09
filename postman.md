@@ -27,23 +27,31 @@ https://sustent0409.vercel.app/api/transactions
   }
 ]
 
-Pre-request Script
+Configura `HASH_SECRET` como variable privada de entorno en Postman. No incluyas
+el secreto en el body ni en una captura.
+
+Pre-request Script (opcional para pruebas manuales)
 
 const CryptoJS = require("crypto-js");
 const payload = JSON.parse(pm.request.body.raw);
 
 function addHash(transaction) {
-  const canonical = {
-    idTxn: transaction.idTxn,
-    user: transaction.user,
-    date: transaction.date,
-    value: transaction.value,
-    paymentMethod: transaction.paymentMethod,
-  };
+  const canonical = Object.fromEntries(
+    Object.entries({
+      idTxn: transaction.idTxn,
+      user: transaction.user,
+      date: transaction.date,
+      value: transaction.value,
+      paymentMethod: transaction.paymentMethod,
+    }).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+  );
 
   return {
     ...transaction,
-    hash: CryptoJS.SHA256(JSON.stringify(canonical)).toString(),
+    hash: CryptoJS.HmacSHA256(
+      JSON.stringify(canonical),
+      pm.environment.get("HASH_SECRET"),
+    ).toString(CryptoJS.enc.Hex),
   };
 }
 

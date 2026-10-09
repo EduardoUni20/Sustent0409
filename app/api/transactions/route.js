@@ -10,7 +10,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+    "Access-Control-Allow-Headers": "Content-Type",
   };
 }
 
@@ -80,14 +80,6 @@ export function OPTIONS() {
 }
 
 export async function POST(request) {
-  const expectedApiKey = process.env.INGEST_API_KEY;
-  if (!expectedApiKey) {
-    return json({ error: "El servidor no tiene configurada INGEST_API_KEY." }, 503);
-  }
-  if (request.headers.get("x-api-key") !== expectedApiKey) {
-    return json({ error: "API key no válida." }, 401);
-  }
-
   let body;
   try {
     body = await request.json();
@@ -143,6 +135,27 @@ export async function POST(request) {
         Date.parse(left.transaction.date) - Date.parse(right.transaction.date),
     );
 
+  const hashResults = new Map();
+  for (const { transaction, originalIndex } of transactions) {
+    try {
+      const hashResult = validateTransactionHash(transaction);
+      logHashDiagnostics(transaction, hashResult);
+      if (!hashResult.valid) {
+        return json(
+          {
+            error: `Transacción ${originalIndex + 1}: HMAC no válido.`,
+            idTxn: String(transaction.idTxn),
+          },
+          401,
+        );
+      }
+      hashResults.set(originalIndex, hashResult);
+    } catch (error) {
+      console.error("[SlidingWindow] Error validando HMAC:", error);
+      return json({ error: error.message }, 503);
+    }
+  }
+
   let windowConfigurations;
   try {
     windowConfigurations = new Map(
@@ -178,14 +191,7 @@ export async function POST(request) {
   for (const { transaction, originalIndex } of transactions) {
     const { windowSize, period, timeZone } =
       windowConfigurations.get(originalIndex);
-    let hashResult;
-    try {
-      hashResult = validateTransactionHash(transaction);
-      logHashDiagnostics(transaction, hashResult);
-    } catch (error) {
-      console.error("[SlidingWindow] Error validando hash:", error);
-      return json({ error: error.message }, 500);
-    }
+    const hashResult = hashResults.get(originalIndex);
 
     const { data, error } = await supabase.rpc("process_transaction", {
       p_id_txn: String(transaction.idTxn),
