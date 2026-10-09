@@ -1,3 +1,4 @@
+// Recibe transacciones, verifica sus datos y HMAC, y delega persistencia/detección a SQL.
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { logHashDiagnostics } from "@/lib/slidingWindowDiagnostics";

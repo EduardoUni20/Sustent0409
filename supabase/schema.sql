@@ -1,3 +1,4 @@
+-- Esquema de persistencia y lógica SQL para usuarios, transacciones, anomalías y dashboard.
 create extension if not exists pgcrypto;
 
 -- Identidad por correo: una fila representa al usuario dueño de sus transacciones.

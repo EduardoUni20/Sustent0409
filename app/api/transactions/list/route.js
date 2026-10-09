@@ -1,3 +1,4 @@
+// Expone la consulta paginada de transacciones para el dashboard.
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 

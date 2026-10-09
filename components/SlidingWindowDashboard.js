@@ -1,3 +1,4 @@
+// Interfaz cliente que consulta métricas/transacciones y permite revisar anomalías.
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -22,7 +23,7 @@ import MetricCard from "@/components/sliding-window/MetricCard";
 import RecentAnomaliesTable from "@/components/sliding-window/RecentAnomaliesTable";
 import { logAnomalyLifecycle } from "@/lib/slidingWindowDiagnostics";
 
-//tipo de moneda para verlo visualmente
+// Formatea montos y cantidades según la configuración regional colombiana.
 const money = new Intl.NumberFormat("es-CO", {
   style: "currency",
   currency: "COP",
@@ -31,7 +32,7 @@ const money = new Intl.NumberFormat("es-CO", {
 const number = new Intl.NumberFormat("es-CO");
 const COLORS = ["#e11d48", "#f59e0b", "#2563eb", "#10b981", "#7c3aed"];
 
-//convertir fecha a hora y minuto para las graficas
+// Convierte una fecha al formato hora:minuto usado por las gráficas.
 function formatHour(value) {
   return new Date(value).toLocaleTimeString("es-CO", {
     hour: "2-digit",
@@ -39,7 +40,7 @@ function formatHour(value) {
   });
 }
 
-// día de la semana número del día ,Esto se usa después en la gráfica semanal.
+// Convierte la fecha al formato abreviado de día y número usado en la gráfica semanal.
 function formatDay(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("es-CO", {
     weekday: "short",
@@ -47,6 +48,7 @@ function formatDay(value) {
   });
 }
 
+// Coordina carga, paginación, actualización de anomalías y presentación de métricas.
 export default function SlidingWindowDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [transactions, setTransactions] = useState([]);

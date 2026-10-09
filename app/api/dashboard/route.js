@@ -1,3 +1,4 @@
+// Expone las métricas agregadas de transacciones y anomalías para el dashboard.
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 

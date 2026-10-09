@@ -1,3 +1,4 @@
+// Expone la actualización del estado de una anomalía identificada por UUID.
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 

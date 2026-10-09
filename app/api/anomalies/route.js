@@ -1,3 +1,4 @@
+// Expone el listado paginado de anomalías, con filtros y datos asociados a cada caso.
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 

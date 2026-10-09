@@ -1,3 +1,5 @@
+-- Ajusta permisos de funciones y backfillea anomalías históricas de velocidad.
+-- RPC para validar y guardar el estado de gestión de una anomalía.
 create or replace function public.update_anomaly_status(
   p_anomaly_id uuid,
   p_status text
@@ -53,6 +55,7 @@ grant execute on function public.get_transaction_dashboard()
 grant execute on function public.update_anomaly_status(uuid, text)
   to service_role;
 
+-- Reconstruye casos históricos de velocidad que cumplen 3 transacciones válidas en 3 segundos.
 with qualifying_transactions as (
   select id, transaction_count
   from (
