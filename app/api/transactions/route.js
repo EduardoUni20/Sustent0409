@@ -7,6 +7,7 @@ import { validateTransactionHash } from "@/lib/transactionHash";
 
 export const runtime = "nodejs";
 
+// Centraliza el origen permitido y los métodos/headers aceptados por CORS.
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
@@ -15,10 +16,12 @@ function corsHeaders() {
   };
 }
 
+// Construye todas las respuestas del endpoint de ingreso con los headers CORS comunes.
 function json(data, status = 200) {
   return NextResponse.json(data, { status, headers: corsHeaders() });
 }
 
+// Aplica el esquema Zod y prepara el formato interno que usan el HMAC y Supabase.
 function normalizeTransaction(input) {
   const parsed = txnSchema.safeParse(input);
   if (!parsed.success) {
@@ -43,6 +46,7 @@ function normalizeTransaction(input) {
   };
 }
 
+// Convierte fechas sin zona horaria a UTC y entrega a PostgreSQL un timestamp ISO uniforme.
 function dateForDatabase(date) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return `${date}T00:00:00.000Z`;
@@ -52,10 +56,13 @@ function dateForDatabase(date) {
   return new Date(normalizedDate).toISOString();
 }
 
+// Responde las solicitudes previas de CORS sin procesar ni guardar transacciones.
 export function OPTIONS() {
   return new Response(null, { status: 204, headers: corsHeaders() });
 }
 
+// Flujo de ingreso: parsear lote, validar datos, verificar HMAC, configurar ventanas,
+// llamar al procedimiento SQL y devolver un resultado por transacción.
 export async function POST(request) {
   let body;
   try {
@@ -64,12 +71,14 @@ export async function POST(request) {
     return json({ error: "El cuerpo debe ser JSON válido." }, 400);
   }
 
+  // Admite un arreglo directo, un objeto con "transactions" o una transacción individual.
   const inputs = Array.isArray(body)
     ? body
     : Array.isArray(body?.transactions)
       ? body.transactions
       : [body];
 
+  // Limita el tamaño del lote y valida la configuración global de detección.
   if (inputs.length === 0) {
     return json({ error: "Envía al menos una transacción." }, 400);
   }
@@ -94,6 +103,7 @@ export async function POST(request) {
     );
   }
 
+  // Valida todo el lote antes de iniciar escrituras; el primer dato inválido cancela el lote.
   const prepared = inputs.map(normalizeTransaction);
   const invalidInputIndex = prepared.findIndex((entry) => entry.error);
   if (invalidInputIndex !== -1) {
@@ -105,6 +115,7 @@ export async function POST(request) {
     );
   }
 
+  // Ordena por fecha para procesar primero las transacciones más antiguas del lote.
   const transactions = prepared
     .map(({ transaction }, originalIndex) => ({ transaction, originalIndex }))
     .sort(
@@ -112,9 +123,11 @@ export async function POST(request) {
         Date.parse(left.transaction.date) - Date.parse(right.transaction.date),
     );
 
+  // Un HMAC inválido se registra como tal; no impide guardar la transacción.
   const hashResults = new Map();
   for (const { transaction, originalIndex } of transactions) {
     try {
+      // validateTransactionHash compara el HMAC recibido con el que el servidor recalcula.
       const hashResult = validateTransactionHash(transaction);
       logHashDiagnostics(transaction, hashResult);
       if (!hashResult.valid) {
@@ -134,6 +147,7 @@ export async function POST(request) {
     }
   }
 
+  // Calcula una ventana para cada fecha y comprueba que el umbral quepa en todas ellas.
   let windowConfigurations;
   try {
     windowConfigurations = new Map(
@@ -158,6 +172,7 @@ export async function POST(request) {
     return json({ error: error.message }, 500);
   }
 
+  // Obtiene el cliente privilegiado del servidor; si faltan credenciales, no procesa el lote.
   let supabase;
   try {
     supabase = getSupabaseAdmin();
@@ -165,12 +180,14 @@ export async function POST(request) {
     return json({ error: error.message }, 503);
   }
 
+  // Guarda cada respuesta en su posición original, aunque el lote se procese ordenado por fecha.
   const results = new Array(transactions.length);
   for (const { transaction, originalIndex } of transactions) {
     const { windowSize, period, timeZone } =
       windowConfigurations.get(originalIndex);
     const hashResult = hashResults.get(originalIndex);
 
+    // Se envía hashValid al SQL: allí se decide si corresponde HASH_INVALIDO o POSIBLE_FRAUDE.
     const { data, error } = await supabase.rpc("process_transaction", {
       p_id_txn: String(transaction.idTxn),
       p_user_email: transaction.user.trim().toLowerCase(),
@@ -203,6 +220,7 @@ export async function POST(request) {
     };
   }
 
+  // Resume el lote y adjunta el resultado SQL junto con los parámetros usados.
   return json({
     received: results.length,
     windowSeconds,

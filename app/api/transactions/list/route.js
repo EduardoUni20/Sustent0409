@@ -8,7 +8,9 @@ export const revalidate = 0;
 const PAGE_SIZE_DEFAULT = 50;
 const PAGE_SIZE_MAX = 100;
 
+// Devuelve transacciones por páginas para no cargar toda la tabla en una sola respuesta.
 export async function GET(request) {
+  // Lee y valida los parámetros antes de construir el rango que se consulta en Supabase.
   const searchParams = request.nextUrl.searchParams;
   const page = Number(searchParams.get("page") || 1);
   const pageSize = Number(searchParams.get("pageSize") || PAGE_SIZE_DEFAULT);
@@ -34,6 +36,7 @@ export async function GET(request) {
   const to = from + pageSize - 1;
 
   try {
+    // Selecciona solo los datos de la página solicitada y cuenta el total para paginar.
     const supabase = getSupabaseAdmin();
     const { data, count, error } = await supabase
       .from("transactions")
@@ -52,6 +55,7 @@ export async function GET(request) {
       );
     }
 
+    // Resuelve correos por separado y los combina con las transacciones de esta página.
     const rows = data || [];
     const userIds = [...new Set(rows.map((row) => row.user_id))];
     const { data: users, error: usersError } =
@@ -82,6 +86,7 @@ export async function GET(request) {
       createdAt: row.created_at,
     }));
 
+    // Devuelve los elementos y metadatos necesarios para solicitar la página siguiente.
     return NextResponse.json(
       {
         transactions,

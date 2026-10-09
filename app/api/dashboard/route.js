@@ -5,8 +5,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Solicita a la función SQL las métricas agregadas que consume el dashboard.
 export async function GET() {
   try {
+    // El cálculo de métricas vive en SQL; esta ruta solo lo invoca y responde al navegador.
     const { data, error } = await getSupabaseAdmin().rpc(
       "get_transaction_dashboard",
     );

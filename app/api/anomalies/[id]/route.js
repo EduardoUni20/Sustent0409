@@ -4,7 +4,9 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Valida el UUID y el nuevo estado antes de pedir a Supabase que actualice la anomalía.
 export async function PATCH(request, { params }) {
+  // El cuerpo debe ser JSON y el estado tiene que pertenecer al conjunto permitido.
   let body;
   try {
     body = await request.json();
@@ -35,6 +37,7 @@ export async function PATCH(request, { params }) {
   }
 
   try {
+    // La función SQL realiza la actualización y devuelve el identificador y estado guardados.
     const { data, error } = await getSupabaseAdmin().rpc(
       "update_anomaly_status",
       {

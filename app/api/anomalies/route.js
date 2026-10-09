@@ -9,7 +9,9 @@ const PAGE_SIZE_DEFAULT = 50;
 const PAGE_SIZE_MAX = 100;
 const VALID_STATUSES = new Set(["open", "reviewed", "discarded"]);
 
+// Lista anomalías en páginas y permite filtrarlas por estado.
 export async function GET(request) {
+  // Valida página, tamaño y filtro para limitar y controlar la consulta.
   const searchParams = request.nextUrl.searchParams;
   const page = Number(searchParams.get("page") || 1);
   const pageSize = Number(searchParams.get("pageSize") || PAGE_SIZE_DEFAULT);
@@ -42,6 +44,7 @@ export async function GET(request) {
   const to = from + pageSize - 1;
 
   try {
+    // Obtiene la página de anomalías; el filtro de estado se aplica solo si no es "all".
     const supabase = getSupabaseAdmin();
     let query = supabase
       .from("anomalies")
@@ -65,6 +68,7 @@ export async function GET(request) {
       );
     }
 
+    // Completa cada caso con su transacción y correo para mostrarlo en la tabla del dashboard.
     const anomalyRows = data || [];
     const transactionIds = anomalyRows.map((row) => row.transaction_id);
     const { data: transactionRows, error: transactionError } =
@@ -127,6 +131,7 @@ export async function GET(request) {
       };
     });
 
+    // Devuelve la página y el total calculado para permitir navegación en la interfaz.
     return NextResponse.json(
       {
         anomalies,

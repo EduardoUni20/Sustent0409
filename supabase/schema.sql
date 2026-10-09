@@ -1,5 +1,6 @@
 create extension if not exists pgcrypto;
 
+-- Identidad por correo: una fila representa al usuario dueño de sus transacciones.
 create table if not exists public.users (
   id uuid primary key default gen_random_uuid(),
   email text not null unique,
@@ -8,6 +9,7 @@ create table if not exists public.users (
   updated_at timestamptz not null default now()
 );
 
+-- Registro persistente de cada transacción y del resultado de validar su hash.
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   id_txn text not null unique,
@@ -28,6 +30,7 @@ create index if not exists transactions_user_date_idx
 create index if not exists transactions_date_idx
   on public.transactions (transaction_date);
 
+-- Casos detectados; el tipo evita duplicar el mismo caso para una transacción.
 create table if not exists public.anomalies (
   id uuid primary key default gen_random_uuid(),
   transaction_id uuid not null references public.transactions(id),
@@ -69,6 +72,7 @@ drop function if exists public.process_transaction(
   text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
 );
 
+-- Guarda una transacción, marca hashes inválidos y detecta exceso de velocidad por usuario.
 create or replace function public.process_transaction(
   p_id_txn text,
   p_user_email text,
@@ -96,6 +100,7 @@ declare
   v_hash_anomaly_id uuid;
   v_level text;
 begin
+  -- Verifica parámetros incluso si la llamada no provino del endpoint esperado.
   if p_window_seconds < 1 or p_threshold < 2 or p_window_size < 1 then
     raise exception 'La duración, el umbral y el tamaño de ventana deben ser válidos.';
   end if;
@@ -103,14 +108,17 @@ begin
     raise exception 'El tamaño de ventana no puede ser menor que el umbral.';
   end if;
 
+  -- Serializa el procesamiento por correo para evitar carreras en la misma ventana.
   perform pg_advisory_xact_lock(hashtextextended(lower(trim(p_user_email)), 0));
 
+  -- Normaliza el correo y obtiene/crea el usuario al que pertenecerá la transacción.
   insert into public.users (email)
   values (lower(trim(p_user_email)))
   on conflict (email) do update
     set updated_at = now()
   returning id into v_user_id;
 
+  -- Inserta una vez por id_txn; el conflicto identifica una transacción duplicada.
   insert into public.transactions (
     id_txn, user_id, value, transaction_date, payment_method, state, ip, hash, hash_valid
   )
@@ -132,6 +140,8 @@ begin
     );
   end if;
 
+  -- Si el HMAC no coincide, conserva la transacción y crea HASH_INVALIDO nivel medium;
+  -- esta condición no rechaza el registro, pero su hash_valid=false lo excluye del conteo de velocidad.
   if not p_hash_valid then
     insert into public.anomalies (
       transaction_id, type, level, transaction_count, window_seconds, window_size
@@ -143,6 +153,8 @@ begin
     returning id into v_hash_anomaly_id;
   end if;
 
+  -- Cuenta para este usuario únicamente hashes válidos: primero toma las p_window_size
+  -- más recientes hasta p_date y luego conserva las que caen dentro de p_window_seconds.
   select count(*)::integer
   into v_window_count
   from (
@@ -157,7 +169,9 @@ begin
   where recent_transactions.transaction_date >=
       p_date - make_interval(secs => p_window_seconds);
 
+  -- Solo un hash válido puede generar POSIBLE_FRAUDE por velocidad, al alcanzar el umbral.
   if p_hash_valid and v_window_count >= p_threshold then
+    -- El nivel depende del conteo: 3x umbral = critical; 2x = high; umbral = medium.
     v_level := case
       when v_window_count >= p_threshold * 3 then 'critical'
       when v_window_count >= p_threshold * 2 then 'high'
@@ -175,6 +189,7 @@ begin
     returning id into v_anomaly_id;
   end if;
 
+  -- Informa si se creó anomalía, sus tipos e ID; también devuelve el conteo evaluado.
   return jsonb_build_object(
     'duplicate', false,
     'idTxn', p_id_txn,
@@ -197,6 +212,7 @@ begin
 end;
 $$;
 
+-- Calcula las métricas y series agregadas que devuelve GET /api/dashboard.
 create or replace function public.get_transaction_dashboard()
 returns jsonb
 language plpgsql
@@ -225,6 +241,7 @@ declare
   v_recurrent_users jsonb;
   v_recent_anomalies jsonb;
 begin
+  -- Agrega conteos y montos para hoy, esta semana y este mes.
   select count(*), coalesce(sum(value), 0)
   into v_today_count, v_today_value
   from public.transactions
@@ -244,11 +261,13 @@ begin
   into v_total_count, v_user_count
   from public.transactions;
 
+  -- Cuenta por separado los hashes inválidos para mostrarlos como métrica.
   select count(*)
   into v_invalid_hashes
   from public.transactions
   where not hash_valid;
 
+  -- Resume casos por estado, usuarios afectados y valor asociado a transacciones anómalas.
   select
     count(*),
     count(*) filter (where a.status = 'open'),
@@ -262,6 +281,7 @@ begin
   from public.anomalies a
   join public.transactions t on t.id = a.transaction_id;
 
+  -- Agrupa las anomalías por hora para la gráfica de las últimas 24 horas.
   select coalesce(
     jsonb_agg(jsonb_build_object('hour', bucket, 'count', anomaly_count) order by bucket),
     '[]'::jsonb
@@ -274,6 +294,7 @@ begin
     group by 1
   ) hours;
 
+  -- Construye la serie diaria de transacciones y anomalías de los últimos siete días.
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -299,6 +320,7 @@ begin
       and a.created_at < days.day + interval '1 day'
   ) anom on true;
 
+  -- Cuenta los ocho métodos de pago más utilizados.
   select coalesce(
     jsonb_agg(jsonb_build_object('method', method, 'count', count) order by count desc),
     '[]'::jsonb
@@ -312,6 +334,7 @@ begin
     limit 8
   ) methods;
 
+  -- Devuelve los ocho usuarios con más de una transacción.
   select coalesce(
     jsonb_agg(jsonb_build_object('email', email, 'count', count) order by count desc),
     '[]'::jsonb
@@ -327,6 +350,7 @@ begin
     limit 8
   ) recurrent;
 
+  -- Construye los casos recientes con los datos de su transacción y usuario.
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -356,6 +380,7 @@ begin
   join public.transactions t on t.id = a.transaction_id
   join public.users u on u.id = t.user_id;
 
+  -- Agrupa todos los indicadores en el JSON que consume GET /api/dashboard.
   return jsonb_build_object(
     'periods', jsonb_build_object(
       'today', jsonb_build_object('transactions', v_today_count, 'value', v_today_value),
@@ -392,6 +417,7 @@ begin
 end;
 $$;
 
+-- Cambia el estado de gestión de una anomalía y actualiza su marca de tiempo.
 create or replace function public.update_anomaly_status(
   p_anomaly_id uuid,
   p_status text
@@ -404,10 +430,12 @@ as $$
 declare
   v_result jsonb;
 begin
+  -- Solo se permiten los tres estados que reconoce la interfaz.
   if p_status not in ('open', 'reviewed', 'discarded') then
     raise exception 'El estado de la anomalía no es válido.';
   end if;
 
+  -- Guarda el nuevo estado y la fecha de modificación del caso.
   update public.anomalies
   set status = p_status,
       updated_at = now()

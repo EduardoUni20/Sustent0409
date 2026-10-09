@@ -62,7 +62,7 @@ export default function SlidingWindowDashboard() {
   const [recurrentUsersPage, setRecurrentUsersPage] = useState(1);
   const recurrentUsersPageSize = 5;
 
-  //api dashooar trae metricas generales  como totales transaciones, anomalias 
+  // Carga las métricas generales y registra el resultado en el diagnóstico del dashboard.
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -91,6 +91,7 @@ export default function SlidingWindowDashboard() {
     requestedPage = 1,
     append = false,
   ) => {
+    // Pide una página al endpoint; append permite acumularla al cargar todas las transacciones.
     setTransactionsLoading(true);
     setError("");
     try {
@@ -132,6 +133,7 @@ export default function SlidingWindowDashboard() {
   }, [loadTransactions]);
 
   async function refreshDashboard() {
+    // Actualiza métricas y vuelve a la primera página de transacciones.
     setTransactionPage(1);
     await Promise.all([
       loadDashboard(),
@@ -140,6 +142,7 @@ export default function SlidingWindowDashboard() {
   }
 
   async function loadAllTransactions() {
+    // Solicita páginas sucesivas y las agrega al estado hasta llegar a la última.
     setLoadingAllTransactions(true);
     try {
       let nextPage = transactionPage;
@@ -156,6 +159,7 @@ export default function SlidingWindowDashboard() {
   }
 
   async function updateStatus(id, status) {
+    // Cambia el estado del caso y vuelve a cargar los datos visibles si la API tuvo éxito.
     setUpdatingId(id);
     setError("");
     try {
