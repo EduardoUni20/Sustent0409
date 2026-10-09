@@ -36,12 +36,16 @@ create table if not exists public.anomalies (
     check (level in ('low', 'medium', 'high', 'critical')),
   transaction_count integer not null,
   window_seconds integer not null,
+  window_size integer,
   status text not null default 'open'
     check (status in ('open', 'reviewed', 'discarded')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (transaction_id, type)
 );
+
+alter table public.anomalies
+  add column if not exists window_size integer;
 
 create index if not exists anomalies_created_at_idx
   on public.anomalies (created_at desc);
@@ -51,6 +55,10 @@ create index if not exists anomalies_status_idx
 alter table public.users enable row level security;
 alter table public.transactions enable row level security;
 alter table public.anomalies enable row level security;
+
+drop function if exists public.process_transaction(
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+);
 
 create or replace function public.process_transaction(
   p_id_txn text,
@@ -63,7 +71,8 @@ create or replace function public.process_transaction(
   p_ip text,
   p_state text,
   p_window_seconds integer,
-  p_threshold integer
+  p_threshold integer,
+  p_window_size integer
 )
 returns jsonb
 language plpgsql
@@ -77,8 +86,11 @@ declare
   v_anomaly_id uuid;
   v_level text;
 begin
-  if p_window_seconds < 1 or p_threshold < 2 then
-    raise exception 'La ventana y el umbral deben ser valores positivos.';
+  if p_window_seconds < 1 or p_threshold < 2 or p_window_size < 1 then
+    raise exception 'La duración, el umbral y el tamaño de ventana deben ser válidos.';
+  end if;
+  if p_window_size < p_threshold then
+    raise exception 'El tamaño de ventana no puede ser menor que el umbral.';
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended(lower(trim(p_user_email)), 0));
@@ -105,17 +117,24 @@ begin
       'idTxn', p_id_txn,
       'hashValid', p_hash_valid,
       'windowCount', 0,
+      'windowSize', p_window_size,
       'anomaly', false
     );
   end if;
 
   select count(*)::integer
   into v_window_count
-  from public.transactions t
-  where t.user_id = v_user_id
-    and t.hash_valid
-    and t.transaction_date >= p_date - make_interval(secs => p_window_seconds)
-    and t.transaction_date <= p_date;
+  from (
+    select t.transaction_date
+    from public.transactions t
+    where t.user_id = v_user_id
+      and t.hash_valid
+      and t.transaction_date <= p_date
+    order by t.transaction_date desc, t.created_at desc, t.id desc
+    limit p_window_size
+  ) recent_transactions
+  where recent_transactions.transaction_date >=
+      p_date - make_interval(secs => p_window_seconds);
 
   if p_hash_valid and v_window_count >= p_threshold then
     v_level := case
@@ -125,10 +144,11 @@ begin
     end;
 
     insert into public.anomalies (
-      transaction_id, type, level, transaction_count, window_seconds
+      transaction_id, type, level, transaction_count, window_seconds, window_size
     )
     values (
-      v_transaction_id, 'POSIBLE_FRAUDE', v_level, v_window_count, p_window_seconds
+      v_transaction_id, 'POSIBLE_FRAUDE', v_level, v_window_count,
+      p_window_seconds, p_window_size
     )
     on conflict (transaction_id, type) do nothing
     returning id into v_anomaly_id;
@@ -140,6 +160,7 @@ begin
     'transactionId', v_transaction_id,
     'hashValid', p_hash_valid,
     'windowCount', v_window_count,
+    'windowSize', p_window_size,
     'anomaly', (v_anomaly_id is not null),
     'anomalyId', v_anomaly_id,
     'type', case when v_anomaly_id is not null then 'POSIBLE_FRAUDE' else null end
@@ -285,6 +306,7 @@ begin
         'level', a.level,
         'count', a.transaction_count,
         'windowSeconds', a.window_seconds,
+        'windowSize', a.window_size,
         'status', a.status,
         'createdAt', a.created_at,
         'idTxn', t.id_txn,
@@ -369,12 +391,12 @@ end;
 $$;
 
 revoke all on function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) from public, anon, authenticated;
 revoke all on function public.get_transaction_dashboard() from public, anon, authenticated;
 revoke all on function public.update_anomaly_status(uuid, text) from public, anon, authenticated;
 grant execute on function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) to service_role;
 grant execute on function public.get_transaction_dashboard() to service_role;
 grant execute on function public.update_anomaly_status(uuid, text) to service_role;

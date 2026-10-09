@@ -33,6 +33,10 @@ se utiliza solo en las rutas del servidor; nunca la publiques como `NEXT_PUBLIC_
    SUPABASE_SECRET_KEY=TU_CLAVE_SECRETA_PRIVADA
    WINDOW_SECONDS=3
    TRANSACTION_THRESHOLD=3
+   WINDOW_TIME_ZONE=America/Bogota
+   MORNING_WINDOW_SIZE=10
+   AFTERNOON_WINDOW_SIZE=6
+   NIGHT_WINDOW_SIZE=3
    HASH_ALGORITHM=sha256
    HASH_ENCODING=hex
    HASH_FIELDS=idTxn,user,date,value,paymentMethod
@@ -56,7 +60,7 @@ En el **SQL Editor** del mismo proyecto de Supabase, ejecuta:
 grant usage on schema public to service_role;
 grant execute on function public.get_transaction_dashboard() to service_role;
 grant execute on function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) to service_role;
 
 select
@@ -67,7 +71,7 @@ select
   ) as dashboard_permission,
   has_function_privilege(
     'service_role',
-    'public.process_transaction(text,text,timestamptz,numeric,text,text,boolean,text,text,integer,integer)',
+    'public.process_transaction(text,text,timestamptz,numeric,text,text,boolean,text,text,integer,integer,integer)',
     'execute'
   ) as transaction_permission;
 ```
@@ -119,12 +123,24 @@ o `{ "transactions": [...] }`. Ejemplo de cuerpo:
 El endpoint también admite `email` en lugar de `user`, `id` en lugar de `idTxn`,
 y `fecha`/`metodoPago` como alias.
 
-La ventana inicial es de **3 segundos** y el umbral es **3 transacciones del
-mismo usuario**. Puedes cambiarlos en `.env.local` o en las variables de Vercel.
-Para enviar una lista de transacciones en una sola petición, se ordena por fecha
-antes de analizarlas. El cálculo se hace por correo y las ventanas de usuarios
-distintos no se mezclan. Los identificadores `idTxn` repetidos se informan como
-duplicados.
+La detección marca una posible anomalía cuando hay **3 o más transacciones con
+hash válido del mismo usuario en 3 segundos**. Además, limita los datos evaluados
+por una ventana móvil cuyo tamaño depende de la hora del campo `date`, interpretada
+en `WINDOW_TIME_ZONE` (por defecto `America/Bogota`):
+
+| Franja horaria | Tamaño de ventana |
+| --- | ---: |
+| 05:00:01–12:00:00 | 10 transacciones |
+| 12:00:01–20:00:00 | 6 transacciones |
+| 20:00:01–05:00:00 del día siguiente | 3 transacciones |
+
+Los tamaños se pueden cambiar en `.env.local` o en las variables de Vercel con
+`MORNING_WINDOW_SIZE`, `AFTERNOON_WINDOW_SIZE` y `NIGHT_WINDOW_SIZE`. La duración
+y el umbral de anomalía se configuran por separado con `WINDOW_SECONDS` y
+`TRANSACTION_THRESHOLD`. Al enviar un lote, se ordena por fecha para procesar cada
+usuario cronológicamente; las ventanas de usuarios distintos no se mezclan.
+Cualquier `idTxn` no vacío de texto o número es válido. Si se vuelve a enviar un
+identificador ya registrado, se reporta como duplicado y no se inserta otra vez.
 
 ## 4. Convención inicial del hash
 
@@ -276,6 +292,12 @@ de autorización, no el hash calculado para cada transacción.
    `idTxn` distintos; el endpoint evita guardar identificadores duplicados.
 
 ## 6. Actualizar el dashboard ya creado en Supabase
+
+Para habilitar el tamaño de ventana por franja y guardarlo en las anomalías,
+vuelve a ejecutar el contenido actualizado de
+[`supabase/schema.sql`](./supabase/schema.sql) en el SQL Editor de Supabase antes
+de desplegar la nueva versión de la aplicación. El script agrega `window_size` y
+actualiza la función RPC usada por el endpoint.
 
 Para ver todas las anomalías con paginación y cambiar su estado desde el dashboard,
 ejecuta el contenido de [`supabase/dashboard_migration.sql`](./supabase/dashboard_migration.sql)

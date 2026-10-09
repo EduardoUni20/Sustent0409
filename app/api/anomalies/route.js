@@ -46,7 +46,7 @@ export async function GET(request) {
     let query = supabase
       .from("anomalies")
       .select(
-        "id, transaction_id, type, level, transaction_count, window_seconds, status, created_at",
+        "id, transaction_id, type, level, transaction_count, window_seconds, window_size, status, created_at",
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -116,6 +116,7 @@ export async function GET(request) {
         level: row.level,
         count: row.transaction_count,
         windowSeconds: row.window_seconds,
+        windowSize: row.window_size,
         status: row.status,
         createdAt: row.created_at,
         idTxn: transaction?.id_txn ?? null,

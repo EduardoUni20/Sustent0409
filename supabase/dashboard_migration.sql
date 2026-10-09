@@ -26,10 +26,10 @@ end;
 $$;
 
 alter function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) security definer;
 alter function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) set search_path = public;
 alter function public.get_transaction_dashboard() security definer;
 alter function public.get_transaction_dashboard() set search_path = public;
@@ -37,7 +37,7 @@ alter function public.update_anomaly_status(uuid, text) security definer;
 alter function public.update_anomaly_status(uuid, text) set search_path = public;
 
 revoke all on function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) from public, anon, authenticated;
 revoke all on function public.get_transaction_dashboard()
   from public, anon, authenticated;
@@ -46,7 +46,7 @@ revoke all on function public.update_anomaly_status(uuid, text)
 
 grant usage on schema public to service_role;
 grant execute on function public.process_transaction(
-  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer
+  text, text, timestamptz, numeric, text, text, boolean, text, text, integer, integer, integer
 ) to service_role;
 grant execute on function public.get_transaction_dashboard()
   to service_role;

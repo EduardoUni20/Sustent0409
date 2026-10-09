@@ -58,6 +58,9 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
                   </td>
                   <td className="whitespace-nowrap py-3 pr-4">
                     {anomaly.count} tx / {anomaly.windowSeconds} s
+                    {anomaly.windowSize
+                      ? ` · ventana de ${anomaly.windowSize} tx`
+                      : ""}
                   </td>
                   <td className="py-3 pr-4 capitalize">{anomaly.level}</td>
                   <td className="py-3 pr-4 capitalize">

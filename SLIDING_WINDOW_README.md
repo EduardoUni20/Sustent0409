@@ -15,6 +15,15 @@
 * **`PATCH /api/anomalies/[id]`:** Cambia el estado de una anomalía (`app/api/anomalies/[id]/route.js`).
 * **Base de datos:** La lógica de base de datos —incluyendo la ventana de transacciones y las funciones que llaman las APIs— está en `supabase/schema.sql`.
 
+La detección se hace por usuario: tres o más transacciones con hash válido en tres
+segundos pueden generar una anomalía. El tamaño de la ventana móvil se elige con
+la fecha (`date`) de cada transacción, en la zona `WINDOW_TIME_ZONE`: 10 registros
+de 05:00:01 a 12:00:00, 6 de 12:00:01 a 20:00:00 y 3 desde 20:00:01 hasta 05:00:00.
+Los tamaños predeterminados son configurables con `MORNING_WINDOW_SIZE`,
+`AFTERNOON_WINDOW_SIZE` y `NIGHT_WINDOW_SIZE`. Los usuarios tienen ventanas
+independientes. Se permite cualquier `idTxn` de texto o número no vacío; un ID ya
+registrado se considera duplicado.
+
 ---
 
 ## Hashes y Logs

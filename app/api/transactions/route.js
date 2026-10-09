@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { logHashDiagnostics } from "@/lib/slidingWindowDiagnostics";
+import { getSlidingWindowConfig } from "@/lib/slidingWindowConfig";
 import { validateTransactionHash } from "@/lib/transactionHash";
 
 export const runtime = "nodejs";
@@ -142,6 +143,30 @@ export async function POST(request) {
         Date.parse(left.transaction.date) - Date.parse(right.transaction.date),
     );
 
+  let windowConfigurations;
+  try {
+    windowConfigurations = new Map(
+      transactions.map(({ transaction, originalIndex }) => [
+        originalIndex,
+        getSlidingWindowConfig(dateForDatabase(transaction.date)),
+      ]),
+    );
+    const smallestWindowSize = Math.min(
+      ...Array.from(windowConfigurations.values(), ({ windowSize }) => windowSize),
+    );
+    if (threshold > smallestWindowSize) {
+      return json(
+        {
+          error:
+            "TRANSACTION_THRESHOLD no puede ser mayor que el tamaño de ventana configurado para las transacciones recibidas.",
+        },
+        500,
+      );
+    }
+  } catch (error) {
+    return json({ error: error.message }, 500);
+  }
+
   let supabase;
   try {
     supabase = getSupabaseAdmin();
@@ -151,6 +176,8 @@ export async function POST(request) {
 
   const results = new Array(transactions.length);
   for (const { transaction, originalIndex } of transactions) {
+    const { windowSize, period, timeZone } =
+      windowConfigurations.get(originalIndex);
     let hashResult;
     try {
       hashResult = validateTransactionHash(transaction);
@@ -172,6 +199,7 @@ export async function POST(request) {
       p_state: transaction.state,
       p_window_seconds: windowSeconds,
       p_threshold: threshold,
+      p_window_size: windowSize,
     });
 
     if (error) {
@@ -185,6 +213,9 @@ export async function POST(request) {
       hashAlgorithm: hashResult.algorithm,
       hashEncoding: hashResult.encoding,
       hashFields: hashResult.fields,
+      windowSize,
+      windowPeriod: period,
+      timeZone,
     };
   }
 
@@ -192,6 +223,12 @@ export async function POST(request) {
     received: results.length,
     windowSeconds,
     threshold,
+    windows: {
+      morning: Number(process.env.MORNING_WINDOW_SIZE || 10),
+      afternoon: Number(process.env.AFTERNOON_WINDOW_SIZE || 6),
+      night: Number(process.env.NIGHT_WINDOW_SIZE || 3),
+      timeZone: process.env.WINDOW_TIME_ZONE || "America/Bogota",
+    },
     results,
   });
 }
