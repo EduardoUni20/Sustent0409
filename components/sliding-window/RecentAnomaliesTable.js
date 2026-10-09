@@ -1,17 +1,44 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const PAGE_SIZE = 10;
 
 export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateStatus }) {
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const totalPages = Math.max(1, Math.ceil(anomalies.length / PAGE_SIZE));
+  const filteredAnomalies = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase("es");
+    return anomalies.filter((anomaly) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        [anomaly.email, anomaly.idTxn]
+          .filter(Boolean)
+          .some((value) =>
+            String(value).toLocaleLowerCase("es").includes(normalizedSearch),
+          );
+      const matchesType = typeFilter === "all" || anomaly.type === typeFilter;
+      const matchesStatus =
+        statusFilter === "all" || anomaly.status === statusFilter;
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [anomalies, search, statusFilter, typeFilter]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAnomalies.length / PAGE_SIZE),
+  );
   const safePage = Math.min(page, totalPages);
 
   const rows = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return anomalies.slice(start, start + PAGE_SIZE);
-  }, [anomalies, safePage]);
+    return filteredAnomalies.slice(start, start + PAGE_SIZE);
+  }, [filteredAnomalies, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, typeFilter]);
 
   return (
     <section className="card">
@@ -19,11 +46,51 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
         <div>
           <h2 className="font-bold text-gray-900">Anomalías recientes</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Línea de tiempo: hora, usuario, transacción, valor y tamaño de la
-            ventana que activó el caso.
+            Busca por correo o ID de transacción y combina los filtros de tipo y
+            estado.
           </p>
         </div>
-        <span className="text-xs text-gray-500">{anomalies.length} registros</span>
+        <span className="text-xs text-gray-500">
+          {filteredAnomalies.length} de {anomalies.length} registros
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          Buscar correo o ID
+          <input
+            className="rounded-md border border-gray-300 px-3 py-2 font-normal"
+            type="search"
+            placeholder="usuario@ejemplo.com"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          Tipo de anomalía
+          <select
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 font-normal"
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+          >
+            <option value="all">Todos los tipos</option>
+            <option value="HASH_INVALIDO">Hash no coincide</option>
+            <option value="POSIBLE_FRAUDE">Transacciones rápidas</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+          Estado
+          <select
+            className="rounded-md border border-gray-300 bg-white px-3 py-2 font-normal"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">Todos los estados</option>
+            <option value="open">Abiertas</option>
+            <option value="reviewed">Revisadas</option>
+            <option value="discarded">Descartadas</option>
+          </select>
+        </label>
       </div>
 
       <div className="mt-4 overflow-x-auto">
@@ -99,7 +166,9 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
             ) : (
               <tr>
                 <td className="py-10 text-center text-gray-500" colSpan={9}>
-                  No se han detectado anomalías.
+                  {anomalies.length
+                    ? "No hay anomalías que coincidan con los filtros."
+                    : "No se han detectado anomalías."}
                 </td>
               </tr>
             )}
