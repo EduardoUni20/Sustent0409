@@ -21,14 +21,14 @@ la fecha (`date`) de cada transacción, en la zona `WINDOW_TIME_ZONE`: 10 regist
 de 05:00:01 a 12:00:00, 6 de 12:00:01 a 20:00:00 y 3 desde 20:00:01 hasta 05:00:00.
 Los tamaños predeterminados son configurables con `MORNING_WINDOW_SIZE`,
 `AFTERNOON_WINDOW_SIZE` y `NIGHT_WINDOW_SIZE`. Los usuarios tienen ventanas
-independientes. Se permite cualquier `idTxn` de texto o número no vacío; un ID ya
-registrado se considera duplicado.
+independientes. `idTxn` debe ser un número no negativo; un ID ya registrado se
+considera duplicado.
 
 ---
 
 ## Hashes y Logs
 
-* **`lib/transactionHash.js`:** Verifica HMAC-SHA-256 de los campos configurables usando comparación de tiempo constante. La clave compartida `HASH_SECRET` debe configurarse en el servidor y en el emisor, que calcula y envía el HMAC de cada transacción.
+* **`lib/transactionHash.js`:** Verifica HMAC-SHA-256 de `idTxn,user,date,value,paymentMethod`, en ese orden, usando comparación de tiempo constante. La clave compartida `HASH_SECRET` debe configurarse en el servidor y en el emisor, que calcula y envía el HMAC de cada transacción.
 * El endpoint no requiere `x-api-key`. Un HMAC faltante o incorrecto se registra como anomalía `HASH_INVALIDO`, se guarda con `hash_valid=false` y se informa en el log del servidor; no cuenta para el detector de velocidad. Un HMAC válido sigue sujeto a la regla de posible fraude por velocidad.
 * Al aceptar HMAC inválidos, el HMAC no autentica ni restringe el acceso al endpoint; protege la comprobación de integridad, pero no evita que terceros manden transacciones.
 * **`lib/slidingWindowDiagnostics.js`:** Registra diagnósticos del hash y eventos del sistema. Las APIs también usan `console.error` cuando falla una operación.

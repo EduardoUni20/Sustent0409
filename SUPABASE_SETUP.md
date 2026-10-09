@@ -140,21 +140,22 @@ Los tamaños se pueden cambiar en `.env.local` o en las variables de Vercel con
 y el umbral de anomalía se configuran por separado con `WINDOW_SECONDS` y
 `TRANSACTION_THRESHOLD`. Al enviar un lote, se ordena por fecha para procesar cada
 usuario cronológicamente; las ventanas de usuarios distintos no se mezclan.
-Cualquier `idTxn` no vacío de texto o número es válido. Si se vuelve a enviar un
-identificador ya registrado, se reporta como duplicado y no se inserta otra vez.
+`idTxn` debe ser un número mayor o igual que cero, como en el esquema del bot.
+Si se vuelve a enviar un identificador ya registrado, se reporta como duplicado
+y no se inserta otra vez.
 
-## 4. HMAC de autenticación de cada transacción
+## 4. HMAC para verificar la integridad de cada transacción
 
 El endpoint verifica un HMAC-SHA-256 y no requiere un encabezado
 `x-api-key`. Configura `HASH_SECRET` con el mismo secreto aleatorio en el
 servidor y en el bot, mediante un canal privado. No uses el ejemplo de clave de
 la diapositiva (`mi_llave_privada_123`) en producción.
 
-Por defecto, el servidor firma estos campos en orden alfabético de nombres,
-serializados como JSON compacto UTF-8, y envía el resultado en hexadecimal:
+El servidor firma estos campos exactamente en este orden, como JSON compacto
+UTF-8, y envía el resultado en hexadecimal:
 
 ```json
-{"date":"2026-09-23T10:30:01.120Z","idTxn":10001,"paymentMethod":"Tarjeta","user":"aa@aa.com","value":50000}
+{"idTxn":10001,"user":"aa@aa.com","date":"2026-09-23T10:30:01.120Z","value":50000,"paymentMethod":"Tarjeta"}
 ```
 
 El bot en Python puede generar el mismo valor con los mismos nombres de campos,
@@ -178,7 +179,7 @@ if isinstance(canonical["value"], float) and canonical["value"].is_integer():
     canonical["value"] = int(canonical["value"])
 data = json.dumps(
     canonical,
-    sort_keys=True,
+    sort_keys=False,
     separators=(",", ":"),
     ensure_ascii=False,
 )
@@ -189,12 +190,13 @@ transaction_hash = hmac.new(
 ).hexdigest()
 ```
 
-Los campos incluidos se configuran en `HASH_FIELDS`; los permitidos son
-`idTxn,user,date,value,paymentMethod,ip,state`. La serialización ordena los
-nombres alfabéticamente, independientemente del orden configurado. Ambos lados
-deben firmar los mismos nombres, valores, tipos y fecha. Los alias del endpoint
-se normalizan antes de verificar el HMAC, así que el bot debe firmar los nombres
-canónicos mostrados arriba. Un HMAC faltante o incorrecto no bloquea el registro:
+Para reproducir este esquema, `HASH_FIELDS` debe ser exactamente
+`idTxn,user,date,value,paymentMethod`. Ambos lados deben firmar los mismos
+nombres, valores, tipos y fecha. El endpoint valida con Zod: `idTxn` y `value`
+son números no negativos, `user` es correo válido, `date` es fecha válida y
+`paymentMethod` tiene al menos dos caracteres. El HMAC se calcula sobre los
+valores originales recibidos para esos cinco campos, en el orden mostrado.
+Un HMAC faltante o incorrecto no bloquea el registro:
 la transacción se guarda con `hash_valid=false`, se registra una anomalía
 `HASH_INVALIDO` y queda excluida del detector de velocidad. La API imprime una
 advertencia en el log del servidor y devuelve `hashValid: false` y
@@ -202,7 +204,8 @@ advertencia en el log del servidor y devuelve `hashValid: false` y
 `POSIBLE_FRAUDE` cuando el mismo usuario alcanza el umbral configurado dentro de
 los segundos configurados.
 
-Como los HMAC inválidos ahora se aceptan y registran, el HMAC ya no impide que
+Los datos que no cumplan el esquema se rechazan con HTTP 422. Como los HMAC
+inválidos ahora se aceptan y registran, el HMAC ya no impide que
 terceros envíen solicitudes: sirve para detectar integridad, no para autorizar
 el acceso. Mantén la URL del endpoint controlada y considera protegerla con
 autenticación o límites de solicitudes si se publica ampliamente.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { logHashDiagnostics } from "@/lib/slidingWindowDiagnostics";
 import { getSlidingWindowConfig } from "@/lib/slidingWindowConfig";
+import { txnSchema } from "@/lib/transactionSchema";
 import { validateTransactionHash } from "@/lib/transactionHash";
 
 export const runtime = "nodejs";
@@ -19,43 +20,23 @@ function json(data, status = 200) {
 }
 
 function normalizeTransaction(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return { error: "Cada transacción debe ser un objeto JSON." };
+  const parsed = txnSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues
+        .map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`)
+        .join("; "),
+    };
   }
 
-  const idTxn = input.idTxn ?? input.id;
-  const user = input.user ?? input.email;
-  const date = input.date ?? input.fecha;
-  const value = input.value;
-  const paymentMethod = input.paymentMethod ?? input.metodoPago;
-  const hash = input.hash;
-
-  if (
-    (typeof idTxn !== "string" && typeof idTxn !== "number") ||
-    String(idTxn).trim() === ""
-  ) {
-    return { error: "idTxn es obligatorio y debe ser texto o número." };
-  }
-  if (typeof user !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user)) {
-    return { error: "user debe ser un correo electrónico válido." };
-  }
-  if (typeof date !== "string" || !Number.isFinite(Date.parse(date))) {
-    return { error: "date debe ser una fecha válida en formato ISO 8601." };
-  }
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return { error: "value debe ser un número mayor o igual que cero." };
-  }
-  if (typeof paymentMethod !== "string" || !paymentMethod.trim()) {
-    return { error: "paymentMethod es obligatorio." };
-  }
   return {
     transaction: {
-      idTxn,
-      user,
-      date,
-      value,
-      paymentMethod,
-      hash: typeof hash === "string" ? hash.trim() : "",
+      idTxn: parsed.data.idTxn,
+      user: input.user,
+      date: input.date,
+      value: parsed.data.value,
+      paymentMethod: input.paymentMethod,
+      hash: parsed.data.hash || "",
       ip: typeof input.ip === "string" ? input.ip : null,
       state: typeof input.state === "string" ? input.state : "received",
     },
@@ -120,7 +101,7 @@ export async function POST(request) {
       {
         error: `Transacción ${invalidInputIndex + 1}: ${prepared[invalidInputIndex].error}`,
       },
-      400,
+      422,
     );
   }
 
