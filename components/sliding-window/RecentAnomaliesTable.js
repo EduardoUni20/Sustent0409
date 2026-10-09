@@ -34,6 +34,7 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
               <th className="py-3 pr-4">Usuario</th>
               <th className="py-3 pr-4">ID transacción</th>
               <th className="py-3 pr-4">Valor</th>
+              <th className="py-3 pr-4">Motivo</th>
               <th className="py-3 pr-4">Ventana</th>
               <th className="py-3 pr-4">Nivel</th>
               <th className="py-3 pr-4">Estado</th>
@@ -55,6 +56,11 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
                       currency: "COP",
                       maximumFractionDigits: 0,
                     }).format(anomaly.value)}
+                  </td>
+                  <td className="py-3 pr-4">
+                    {anomaly.type === "HASH_INVALIDO"
+                      ? "Hash no coincide"
+                      : "Transacciones rápidas"}
                   </td>
                   <td className="whitespace-nowrap py-3 pr-4">
                     {anomaly.count} tx / {anomaly.windowSeconds} s
@@ -92,7 +98,7 @@ export default function RecentAnomaliesTable({ anomalies, updatingId, onUpdateSt
               ))
             ) : (
               <tr>
-                <td className="py-10 text-center text-gray-500" colSpan={8}>
+                <td className="py-10 text-center text-gray-500" colSpan={9}>
                   No se han detectado anomalías.
                 </td>
               </tr>

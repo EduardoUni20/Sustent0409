@@ -145,7 +145,7 @@ identificador ya registrado, se reporta como duplicado y no se inserta otra vez.
 
 ## 4. HMAC de autenticación de cada transacción
 
-El endpoint requiere un HMAC-SHA-256 válido y no requiere un encabezado
+El endpoint verifica un HMAC-SHA-256 y no requiere un encabezado
 `x-api-key`. Configura `HASH_SECRET` con el mismo secreto aleatorio en el
 servidor y en el bot, mediante un canal privado. No uses el ejemplo de clave de
 la diapositiva (`mi_llave_privada_123`) en producción.
@@ -194,8 +194,18 @@ Los campos incluidos se configuran en `HASH_FIELDS`; los permitidos son
 nombres alfabéticamente, independientemente del orden configurado. Ambos lados
 deben firmar los mismos nombres, valores, tipos y fecha. Los alias del endpoint
 se normalizan antes de verificar el HMAC, así que el bot debe firmar los nombres
-canónicos mostrados arriba. Un HMAC faltante produce HTTP 400 y uno incorrecto
-HTTP 401. Si el lote tiene un HMAC inválido, no se guarda ninguna transacción.
+canónicos mostrados arriba. Un HMAC faltante o incorrecto no bloquea el registro:
+la transacción se guarda con `hash_valid=false`, se registra una anomalía
+`HASH_INVALIDO` y queda excluida del detector de velocidad. La API imprime una
+advertencia en el log del servidor y devuelve `hashValid: false` y
+`anomaly: true`. Las transacciones con HMAC válido siguen generando
+`POSIBLE_FRAUDE` cuando el mismo usuario alcanza el umbral configurado dentro de
+los segundos configurados.
+
+Como los HMAC inválidos ahora se aceptan y registran, el HMAC ya no impide que
+terceros envíen solicitudes: sirve para detectar integridad, no para autorizar
+el acceso. Mantén la URL del endpoint controlada y considera protegerla con
+autenticación o límites de solicitudes si se publica ampliamente.
 
 ## 5. Probar el endpoint
 
@@ -218,8 +228,8 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:3000/api/transactions" `
 ```
 
 El endpoint admite preflight `OPTIONS` para clientes web y no requiere un
-encabezado `x-api-key`: el HMAC de cada transacción autoriza y protege su
-integridad.
+encabezado `x-api-key`: el HMAC de cada transacción permite comprobar su
+integridad; si no coincide, se guarda y se marca como anomalía.
 `ALLOWED_ORIGIN` controla el origen CORS (por defecto `*`).
 
 ### Probar desde Postman
@@ -272,11 +282,12 @@ integridad.
 
 ## 6. Actualizar el dashboard ya creado en Supabase
 
-Para habilitar el tamaño de ventana por franja y guardarlo en las anomalías,
-vuelve a ejecutar el contenido actualizado de
+Para habilitar el tamaño de ventana por franja, el registro de anomalías por hash
+inválido y guardarlo en el dashboard, vuelve a ejecutar el contenido actualizado de
 [`supabase/schema.sql`](./supabase/schema.sql) en el SQL Editor de Supabase antes
-de desplegar la nueva versión de la aplicación. El script agrega `window_size` y
-actualiza la función RPC usada por el endpoint.
+de desplegar la nueva versión de la aplicación. El script agrega `window_size`,
+actualiza la función RPC usada por el endpoint y registra como `HASH_INVALIDO`
+las transacciones antiguas que ya tengan `hash_valid=false`.
 
 Para ver todas las anomalías con paginación y cambiar su estado desde el dashboard,
 ejecuta el contenido de [`supabase/dashboard_migration.sql`](./supabase/dashboard_migration.sql)

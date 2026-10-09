@@ -29,7 +29,8 @@ registrado se considera duplicado.
 ## Hashes y Logs
 
 * **`lib/transactionHash.js`:** Verifica HMAC-SHA-256 de los campos configurables usando comparación de tiempo constante. La clave compartida `HASH_SECRET` debe configurarse en el servidor y en el emisor, que calcula y envía el HMAC de cada transacción.
-* El endpoint no requiere `x-api-key`. Un HMAC faltante se rechaza con HTTP 400 y uno que no coincide con HTTP 401; se validan todos los hashes del lote antes de guardar cualquier transacción.
+* El endpoint no requiere `x-api-key`. Un HMAC faltante o incorrecto se registra como anomalía `HASH_INVALIDO`, se guarda con `hash_valid=false` y se informa en el log del servidor; no cuenta para el detector de velocidad. Un HMAC válido sigue sujeto a la regla de posible fraude por velocidad.
+* Al aceptar HMAC inválidos, el HMAC no autentica ni restringe el acceso al endpoint; protege la comprobación de integridad, pero no evita que terceros manden transacciones.
 * **`lib/slidingWindowDiagnostics.js`:** Registra diagnósticos del hash y eventos del sistema. Las APIs también usan `console.error` cuando falla una operación.
 * **Nota de seguridad:** Los diagnósticos del hash incluyen datos de la transacción (como el correo), pero no imprimen el hash recibido.
 

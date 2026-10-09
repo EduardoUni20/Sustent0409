@@ -52,6 +52,15 @@ create index if not exists anomalies_created_at_idx
 create index if not exists anomalies_status_idx
   on public.anomalies (status);
 
+insert into public.anomalies (
+  transaction_id, type, level, transaction_count, window_seconds, window_size
+)
+select
+  id, 'HASH_INVALIDO', 'medium', 1, 3, 3
+from public.transactions
+where not hash_valid
+on conflict (transaction_id, type) do nothing;
+
 alter table public.users enable row level security;
 alter table public.transactions enable row level security;
 alter table public.anomalies enable row level security;
@@ -84,6 +93,7 @@ declare
   v_transaction_id uuid;
   v_window_count integer;
   v_anomaly_id uuid;
+  v_hash_anomaly_id uuid;
   v_level text;
 begin
   if p_window_seconds < 1 or p_threshold < 2 or p_window_size < 1 then
@@ -120,6 +130,17 @@ begin
       'windowSize', p_window_size,
       'anomaly', false
     );
+  end if;
+
+  if not p_hash_valid then
+    insert into public.anomalies (
+      transaction_id, type, level, transaction_count, window_seconds, window_size
+    )
+    values (
+      v_transaction_id, 'HASH_INVALIDO', 'medium', 1, p_window_seconds, p_window_size
+    )
+    on conflict (transaction_id, type) do nothing
+    returning id into v_hash_anomaly_id;
   end if;
 
   select count(*)::integer
@@ -161,9 +182,17 @@ begin
     'hashValid', p_hash_valid,
     'windowCount', v_window_count,
     'windowSize', p_window_size,
-    'anomaly', (v_anomaly_id is not null),
-    'anomalyId', v_anomaly_id,
-    'type', case when v_anomaly_id is not null then 'POSIBLE_FRAUDE' else null end
+    'anomaly', (v_anomaly_id is not null or v_hash_anomaly_id is not null),
+    'anomalyTypes', to_jsonb(array_remove(array[
+      case when v_hash_anomaly_id is not null then 'HASH_INVALIDO' end,
+      case when v_anomaly_id is not null then 'POSIBLE_FRAUDE' end
+    ]::text[], null::text)),
+    'anomalyId', coalesce(v_anomaly_id, v_hash_anomaly_id),
+    'type', case
+      when v_hash_anomaly_id is not null then 'HASH_INVALIDO'
+      when v_anomaly_id is not null then 'POSIBLE_FRAUDE'
+      else null
+    end
   );
 end;
 $$;

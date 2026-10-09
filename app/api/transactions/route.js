@@ -48,10 +48,6 @@ function normalizeTransaction(input) {
   if (typeof paymentMethod !== "string" || !paymentMethod.trim()) {
     return { error: "paymentMethod es obligatorio." };
   }
-  if (typeof hash !== "string" || !hash.trim()) {
-    return { error: "hash es obligatorio." };
-  }
-
   return {
     transaction: {
       idTxn,
@@ -59,7 +55,7 @@ function normalizeTransaction(input) {
       date,
       value,
       paymentMethod,
-      hash: hash.trim(),
+      hash: typeof hash === "string" ? hash.trim() : "",
       ip: typeof input.ip === "string" ? input.ip : null,
       state: typeof input.state === "string" ? input.state : "received",
     },
@@ -141,13 +137,14 @@ export async function POST(request) {
       const hashResult = validateTransactionHash(transaction);
       logHashDiagnostics(transaction, hashResult);
       if (!hashResult.valid) {
-        return json(
-          {
-            error: `Transacción ${originalIndex + 1}: HMAC no válido.`,
-            idTxn: String(transaction.idTxn),
-          },
-          401,
-        );
+        console.warn("[SlidingWindow] Transacción recibida con HMAC no válido:", {
+          idTxn: String(transaction.idTxn),
+          user: transaction.user,
+          date: transaction.date,
+          reason: transaction.hash
+            ? "El HMAC no coincide con la configuración."
+            : "La transacción no contiene HMAC.",
+        });
       }
       hashResults.set(originalIndex, hashResult);
     } catch (error) {
